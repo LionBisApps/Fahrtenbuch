@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="de"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Fahrtenbuch"><meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" id="ico"><title>Fahrtenbuch</title>
+<style>
+:root{--bg:#f6f6f3;--fg:#1d1d1b;--card:#fff;--mut:#6b6b66;--acc:#1d6b4f;--bd:#dcdcd5;--bad:#b3261e;color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root{--bg:#161615;--fg:#eeeeea;--card:#222220;--mut:#a0a09a;--acc:#5cc29a;--bd:#38382f;--bad:#f2b8b5;color-scheme:dark}}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:640px;margin:0 auto;padding:12px 14px 30px}
+h2{font-size:16px;margin:0 0 8px}
+nav{display:flex;gap:6px;margin-bottom:12px}
+nav button{flex:1;margin:0;padding:9px 2px;font-size:13px;background:var(--card);color:var(--fg);border:1px solid var(--bd)}
+nav button.on{background:var(--acc);color:#fff;border-color:var(--acc)}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px;margin-bottom:12px}
+label{display:block;font-size:13px;color:var(--mut);margin:10px 0 3px}
+input,select{width:100%;box-sizing:border-box;font:inherit;padding:10px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--fg)}
+button{font:inherit;padding:11px 14px;border-radius:8px;border:1px solid var(--acc);background:var(--acc);color:#fff;margin-top:12px;cursor:pointer}
+button.sec{background:transparent;color:var(--acc)}
+.row{display:flex;gap:8px}.row>*{flex:1}
+.err{color:var(--bad);font-size:14px;margin-top:8px}
+.mut{color:var(--mut);font-size:14px}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
+.chip{border:1px solid var(--acc);color:var(--acc);border-radius:20px;padding:5px 11px;font-size:14px;cursor:pointer}
+.t{border-top:1px solid var(--bd);padding:9px 0}.t:first-child{border-top:0}
+.tag{font-size:12px;border:1px solid var(--bd);border-radius:20px;padding:1px 8px;color:var(--mut)}
+details{font-size:13px;color:var(--mut)}
+table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:right;padding:5px 3px;border-bottom:1px solid var(--bd)}th:first-child,td:first-child{text-align:left}
+.big{font-size:26px;font-weight:700}
+.days label{display:inline-block;margin:4px 8px 0 0;font-size:15px;color:var(--fg)}.days input{width:auto}
+.pdf{background:#fff;color:#000;padding:10px;border-radius:8px;overflow-x:auto}.pdf table{font-size:10px;min-width:560px}.pdf th,.pdf td{text-align:left;border:1px solid #bbb}
+@media print{nav,.noprint{display:none!important}body{background:#fff}.pdf{padding:0}.pdf table{min-width:0}}
+</style></head><body><main id="app"></main>
+<script>
+const KEY="fahrtenbuch-v2",$=s=>document.querySelector(s);
+const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const nf=n=>Number(n).toLocaleString("de-DE"),pad=n=>String(n).padStart(2,"0");
+const iso=d=>d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
+const today=()=>iso(new Date()),fd=d=>d.split("-").reverse().join(".");
+const TY={b:"Geschäftlich",p:"Privat",w:"Arbeitsweg"},WD=["So","Mo","Di","Mi","Do","Fr","Sa"];
+let D={veh:[],cur:null,favs:[],log:{},set:{sync:true,days:[1,2,3,4,5],time:"18:00",until:"",remEnd:""}};
+try{const r=localStorage.getItem(KEY);if(r)D=JSON.parse(r)}catch(e){}
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(D))}catch(e){}};
+let view="e",F={},editId=null,msg="",Y=new Date().getFullYear(),pending=null;
+const V=()=>D.veh.find(v=>v.id===D.cur)||D.veh[0];
+function eff(vid){const m={},o=[];(D.log[vid]||[]).forEach(r=>{const id=r.kind==="E"?r.seq:r.ref;if(r.kind==="E")o.push(id);(m[id]=m[id]||[]).push(r)});return o.map(id=>({id,cur:m[id][m[id].length-1],hist:m[id].slice(0,-1)}))}
+const q=s=>'"'+String(s).replace(/"/g,'""')+'"';
+function addRow(v,r){const L=D.log[v.id]=D.log[v.id]||[];r.seq=L.length+1;r.at=Date.now();L.push(r);save();
+ if(D.set.sync&&v.sc){const line=[r.seq,new Date(r.at).toISOString(),r.kind==="K"?"Korrektur zu "+r.ref:"Neu",r.date,TY[r.type],r.startKm,r.endKm,r.endKm-r.startKm,q(r.from),q(r.to),q(r.purpose),q(r.partner)].join(";");
+  pending="shortcuts://run-shortcut?name="+encodeURIComponent(v.sc)+"&input=text&text="+encodeURIComponent(line)}}
+function newForm(){const l=eff(V().id),b=l.slice().reverse().find(e=>e.cur.type==="b");
+ F={date:today(),type:"b",endKm:"",from:b?b.cur.from:"",to:b?b.cur.to:"",purpose:b?b.cur.purpose:"",partner:b?b.cur.partner:""};editId=null}
+function go(v){view=v;msg="";if(v==="e"&&!editId)newForm();render()}
+function setVeh(id){D.cur=id;save();newForm();render()}
+function fav(i){const f=D.favs[i];Object.assign(F,{type:"b",from:f.from,to:f.to,purpose:f.purpose,partner:f.partner});render()}
+function saveFav(){if(!F.from||!F.to){msg="Für einen Favoriten Startort und Ziel eintragen.";return render()}
+ const n=F.from+" → "+F.to;if(!D.favs.some(f=>f.n===n))D.favs.push({n,from:F.from,to:F.to,purpose:F.purpose||"",partner:F.partner||""});save();msg="";render()}
+function delFav(i){D.favs.splice(i,1);save();render()}
+function saveEntry(){const v=V(),l=eff(v.id),k=editId?l.findIndex(e=>e.id===editId):l.length;
+ const start=k>0?l[k-1].cur.endKm:v.startKm,end=parseInt(F.endKm);let e="";
+ if(!F.date)e="Datum fehlt.";else if(isNaN(end)||end<=start)e="Der Endstand muss höher sein als "+nf(start)+" km.";
+ else if(F.type==="b"&&!(F.from&&F.to&&F.purpose&&F.partner))e="Geschäftsfahrt: Startort, Ziel, Zweck und Geschäftspartner sind Pflicht.";
+ else if(editId&&k<l.length-1&&end!==l[k+1].cur.startKm)e="Der Endstand kann nur beim letzten Eintrag geändert werden.";
+ if(e){msg=e;return render()}
+ const r={kind:editId?"K":"E",date:F.date,type:F.type,startKm:start,endKm:end,from:"",to:"",purpose:"",partner:""};
+ if(editId)r.ref=editId;if(F.type==="b"){r.from=F.from;r.to=F.to;r.purpose=F.purpose;r.partner=F.partner}
+ addRow(v,r);msg="";view=editId?"j":"e";editId=null;newForm();render()}
+function edit(id){const e=eff(V().id).find(x=>x.id===id).cur;editId=id;F={date:e.date,type:e.type,endKm:e.endKm,from:e.from,to:e.to,purpose:e.purpose,partner:e.partner};view="e";render();scrollTo(0,0)}
+function vEntry(){const v=V(),l=eff(v.id),k=editId?l.findIndex(e=>e.id===editId):l.length,start=k>0?l[k-1].cur.endKm:v.startKm;
+ let h=D.veh.length>1?`<select onchange="setVeh(+this.value)" style="margin-bottom:10px">${D.veh.map(x=>`<option value="${x.id}" ${x.id===v.id?"selected":""}>${esc(x.name)} · ${esc(x.plate)}</option>`).join("")}</select>`:"";
+ h+=`<div class="card"><h2>${editId?"Eintrag korrigieren":"Neue Fahrt"}</h2>
+<label>Datum</label><input type="date" value="${F.date}" onchange="F.date=this.value">
+<label>Art</label><select onchange="F.type=this.value;render()">${Object.keys(TY).map(t=>`<option value="${t}" ${F.type===t?"selected":""}>${TY[t]}</option>`).join("")}</select>
+<div class="row"><div><label>Start (automatisch)</label><input value="${nf(start)} km" disabled></div>
+<div><label>Endstand</label><input type="number" inputmode="numeric" value="${F.endKm}" oninput="F.endKm=this.value"></div></div>`;
+ if(F.type==="b"){if(D.favs.length)h+=`<label>Favoriten</label><div class="chips">${D.favs.map((f,i)=>`<span class="chip" onclick="fav(${i})">${esc(f.n)}</span>`).join("")}</div>`;
+  h+=`<label>Startort</label><input value="${esc(F.from)}" oninput="F.from=this.value">
+<label>Reiseziel</label><input value="${esc(F.to)}" oninput="F.to=this.value">
+<label>Reisezweck</label><input value="${esc(F.purpose)}" oninput="F.purpose=this.value">
+<label>Kunde / Geschäftspartner</label><input value="${esc(F.partner)}" oninput="F.partner=this.value">
+<button class="sec" onclick="saveFav()">★ Als Favorit speichern</button>`}
+ h+=`<div class="err">${esc(msg)}</div><button onclick="saveEntry()">${editId?"Korrektur speichern":"Fahrt speichern"}</button>${editId?` <button class="sec" onclick="editId=null;go('j')">Abbrechen</button>`:""}
+<p class="mut">Mikrofon-Taste der iPhone-Tastatur: Felder per Sprache diktieren.</p></div>`;return h}
+function vJournal(){const v=V(),l=eff(v.id).reverse();let h=`<div class="card"><h2>Journal · ${esc(v.name)}</h2>`;
+ if(!l.length)h+=`<p class="mut">Noch keine Einträge.</p>`;
+ l.forEach(e=>{const c=e.cur;h+=`<div class="t"><b>${fd(c.date)}</b> <span class="tag">${TY[c.type]}</span> <span class="mut">${nf(c.endKm-c.startKm)} km · ${nf(c.startKm)} → ${nf(c.endKm)}</span>`;
+  if(c.type==="b")h+=`<div>${esc(c.from)} → ${esc(c.to)}</div><div class="mut">${esc(c.purpose)} · ${esc(c.partner)}</div>`;
+  if(e.hist.length)h+=`<details><summary>Korrigiert (${e.hist.length}×)</summary>${e.hist.map(r=>`<div>${new Date(r.at).toLocaleString("de-DE")}: ${fd(r.date)}, ${TY[r.type]}, ${nf(r.startKm)}–${nf(r.endKm)} km ${esc(r.to)} ${esc(r.purpose)} ${esc(r.partner)}</div>`).join("")}</details>`;
+  h+=`<a href="#" onclick="edit(${e.id});return false" style="color:var(--acc);font-size:14px">Korrigieren</a></div>`});return h+"</div>"}
+function vEval(){const v=V(),l=eff(v.id).map(e=>e.cur),ys=[...new Set(l.map(c=>+c.date.slice(0,4)).concat([new Date().getFullYear()]))].sort();
+ const ly=l.filter(c=>+c.date.slice(0,4)===Y),M=Array.from({length:12},()=>({b:0,p:0,w:0})),S={b:0,p:0,w:0};
+ ly.forEach(c=>{const km=c.endKm-c.startKm;M[+c.date.slice(5,7)-1][c.type]+=km;S[c.type]+=km});const tot=S.b+S.p+S.w,pct=tot?(S.b/tot*100).toFixed(1).replace(".",","):"0";
+ const mn=["Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"];
+ let h=`<select onchange="Y=+this.value;render()" style="margin-bottom:10px">${ys.map(y=>`<option ${y===Y?"selected":""}>${y}</option>`).join("")}</select>
+<div class="card"><h2>Geschäftsanteil ${Y}</h2><div class="big">${pct} %</div><div class="mut">${nf(S.b)} von ${nf(tot)} km</div></div>
+<div class="card"><h2>Jahresabschluss ${Y}</h2>`;
+ if(ly.length)h+=`<div>Anfangsstand: <b>${nf(ly[0].startKm)} km</b></div><div>Endstand: <b>${nf(ly[ly.length-1].endKm)} km</b></div><div>Gesamt: <b>${nf(tot)} km</b> (geschäftlich ${nf(S.b)}, privat ${nf(S.p)}, Arbeitsweg ${nf(S.w)})</div>`;else h+=`<p class="mut">Keine Fahrten.</p>`;
+ h+=`</div><div class="card"><h2>Kilometer pro Monat</h2><table><tr><th>Monat</th><th>Gesch.</th><th>Privat</th><th>Arbw.</th><th>Σ</th></tr>${M.map((m,i)=>`<tr><td>${mn[i]}</td><td>${nf(m.b)}</td><td>${nf(m.p)}</td><td>${nf(m.w)}</td><td>${nf(m.b+m.p+m.w)}</td></tr>`).join("")}</table>
+<button onclick="go('p')">PDF-Ansicht mit Änderungsverlauf</button></div>`;return h}
+function vPdf(){const v=V(),L=D.log[v.id]||[];
+ return `<div class="noprint"><button onclick="window.print()">Drucken / als PDF sichern</button> <button class="sec" onclick="go('a')">Zurück</button><p class="mut">Teilen-Symbol → „Sichern als PDF“ bzw. „In Dateien sichern“.</p></div>
+<div class="pdf"><b>Fahrtenbuch ${esc(v.name)} · ${esc(v.plate)}</b><br>Anfangsstand bei Beginn: ${nf(v.startKm)} km · Stand ${new Date().toLocaleDateString("de-DE")}
+<table><tr><th>Nr</th><th>Erfasst am</th><th>Vorgang</th><th>Datum</th><th>Art</th><th>Km Start</th><th>Km Ende</th><th>km</th><th>Start</th><th>Ziel</th><th>Zweck</th><th>Partner</th></tr>
+${L.map(r=>`<tr><td>${r.seq}</td><td>${new Date(r.at).toLocaleString("de-DE")}</td><td>${r.kind==="K"?"Korrektur zu "+r.ref:"Neu"}</td><td>${fd(r.date)}</td><td>${TY[r.type]}</td><td>${nf(r.startKm)}</td><td>${nf(r.endKm)}</td><td>${r.endKm-r.startKm}</td><td>${esc(r.from)}</td><td>${esc(r.to)}</td><td>${esc(r.purpose)}</td><td>${esc(r.partner)}</td></tr>`).join("")}</table></div>`}
+function addVeh(){const n=$("#vn").value.trim(),p=$("#vp").value.trim(),k=parseInt($("#vk").value);
+ if(!n||!p||isNaN(k)||k<0){msg="Name, Kennzeichen und Kilometerstand zu Beginn angeben.";return render()}
+ const id=Date.now(),s="Fahrtenbuch Speichern "+(D.veh.length+1);D.veh.push({id,name:n,plate:p,startKm:k,sc:s});D.log[id]=[];if(!D.cur)D.cur=id;msg="";save();newForm();render()}
+function setS(k,v){D.set[k]=v;save()}
+function setDay(d,on){const s=new Set(D.set.days);on?s.add(d):s.delete(d);D.set.days=[...s];save()}
+function updRem(){const s=D.set,out=[],now=new Date(),hasToday=D.veh.some(v=>eff(v.id).some(e=>e.cur.date===today()));let last="";
+ for(let i=0;i<28;i++){const d=new Date(now.getFullYear(),now.getMonth(),now.getDate()+i),ds=iso(d);
+  if(!s.days.includes(d.getDay())||(s.until&&ds<=s.until))continue;
+  if(i===0&&(hasToday||ds+" "+s.time<=iso(now)+" "+pad(now.getHours())+":"+pad(now.getMinutes())))continue;out.push(ds+" "+s.time);last=ds}
+ s.remEnd=last;save();if(!out.length){msg="Keine Termine im Zeitraum.";return render()}
+ pending="shortcuts://run-shortcut?name="+encodeURIComponent("Fahrtenbuch Erinnerungen")+"&input=text&text="+encodeURIComponent(out.join("\n"));render()}
+function vSet(){const s=D.set;let h=`<div class="card"><h2>Fahrzeuge</h2>${D.veh.map(v=>`<div class="t"><b>${esc(v.name)}</b> · ${esc(v.plate)} <span class="mut">· Start ${nf(v.startKm)} km</span>
+<label>Name des Kurzbefehls für die Datei</label><input value="${esc(v.sc)}" onchange="V2(${v.id},this.value)"></div>`).join("")}
+<label>Neues Fahrzeug</label><input id="vn" placeholder="Name, z. B. Firmenwagen"><input id="vp" placeholder="Kennzeichen" style="margin-top:6px"><input id="vk" type="number" inputmode="numeric" placeholder="Kilometerstand zu Beginn" style="margin-top:6px">
+<div class="err">${esc(msg)}</div><button onclick="addVeh()">Fahrzeug anlegen</button></div>
+<div class="card"><h2>Datei per Kurzbefehl</h2><label class="days"><input type="checkbox" ${s.sync?"checked":""} onchange="setS('sync',this.checked)"> Jede Fahrt an den Kurzbefehl senden (hängt eine Zeile an die CSV an)</label></div>
+<div class="card"><h2>Erinnerung</h2><div class="days">${[1,2,3,4,5,6,0].map(d=>`<label><input type="checkbox" ${s.days.includes(d)?"checked":""} onchange="setDay(${d},this.checked)"> ${WD[d]}</label>`).join("")}</div>
+<label>Uhrzeit</label><input type="time" value="${s.time}" onchange="setS('time',this.value)">
+<label>Urlaubsmodus bis einschließlich (leer = aus)</label><input type="date" value="${s.until}" onchange="setS('until',this.value)">
+<button onclick="updRem()">Erinnerungen aktualisieren</button>
+<p class="mut">${s.remEnd?"Erinnerungen angelegt bis "+fd(s.remEnd)+". Danach erneut aktualisieren.":"Noch keine Erinnerungen angelegt."}</p></div>`;
+ if(D.favs.length)h+=`<div class="card"><h2>Favoriten</h2>${D.favs.map((f,i)=>`<div class="t">${esc(f.n)} <a href="#" onclick="delFav(${i});return false" style="color:var(--bad)">entfernen</a></div>`).join("")}</div>`;return h}
+function V2(id,x){D.veh.find(v=>v.id===id).sc=x.trim();save()}
+function render(){let h="";
+ if(!D.veh.length){view="s";h=`<h2>Willkommen beim Fahrtenbuch</h2><p class="mut">Lege zuerst dein erstes Fahrzeug an.</p>`}
+ else h=`<nav>${[["e","Eintrag"],["j","Journal"],["a","Auswertung"],["s","Einstellungen"]].map(t=>`<button class="${view===t[0]||(view==="p"&&t[0]==="a")?"on":""}" onclick="go('${t[0]}')">${t[1]}</button>`).join("")}</nav>`;
+ h+=view==="e"?vEntry():view==="j"?vJournal():view==="a"?vEval():view==="p"?vPdf():vSet();
+ $("#app").innerHTML=h;
+ if(pending){const u=pending;pending=null;setTimeout(()=>{location.href=u},300)}}
+try{const c=document.createElement("canvas");c.width=c.height=180;const x=c.getContext("2d");x.fillStyle="#1d6b4f";x.fillRect(0,0,180,180);x.fillStyle="#fff";x.font="bold 84px system-ui";x.textAlign="center";x.fillText("FB",90,118);$("#ico").href=c.toDataURL("image/png")}catch(e){}
+if(D.veh.length)newForm();render();
+</script></body></html>
