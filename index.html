@@ -52,9 +52,11 @@ const q=s=>'"'+String(s).replace(/"/g,'""')+'"';
 function addRow(v,r){const L=D.log[v.id]=D.log[v.id]||[];r.seq=L.length+1;r.at=Date.now();L.push(r);save();
  if(D.set.sync&&v.sc){const line=[r.seq,new Date(r.at).toISOString(),r.kind==="K"?"Korrektur zu "+r.ref:"Neu",r.date,TY[r.type],r.startKm,r.endKm,r.endKm-r.startKm,q(r.from),q(r.to),q(r.purpose),q(r.partner)].join(";");
   pending="shortcuts://run-shortcut?name="+encodeURIComponent(v.sc)+"&input=text&text="+encodeURIComponent(line)}}
-function newForm(){const l=eff(V().id),b=l.slice().reverse().find(e=>e.cur.type==="b");
- F={date:today(),type:"b",endKm:"",from:b?b.cur.from:"",to:b?b.cur.to:"",purpose:b?b.cur.purpose:"",partner:b?b.cur.partner:""};editId=null}
-function go(v){view=v;msg="";if(v==="e"&&!editId)newForm();render()}
+function newForm(){const l=eff(V().id),bs=l.filter(e=>e.cur.type==="b");let b=null;
+ for(let i=bs.length-1;i>=0;i--){const e=bs[i].cur,p=i>0?bs[i-1].cur:null;if(p&&e.from===p.to&&e.to===p.from)continue;b=e;break}
+ F={date:today(),type:"b",endKm:"",from:b?b.from:"",to:b?b.to:"",purpose:b?b.purpose:"",partner:b?b.partner:""};editId=null}
+function swapRoute(){const t=F.from;F.from=F.to;F.to=t;render()}
+function go(v){view=v;msg="";rmsg="";if(v==="e"&&!editId)newForm();render()}
 function setVeh(id){D.cur=id;save();newForm();render()}
 function fav(i){const f=D.favs[i];Object.assign(F,{type:"b",from:f.from,to:f.to,purpose:f.purpose,partner:f.partner});render()}
 function saveFav(){if(!F.from||!F.to){msg="Für einen Favoriten Startort und Ziel eintragen.";return render()}
@@ -82,7 +84,7 @@ function vEntry(){const v=V(),l=eff(v.id),k=editId?l.findIndex(e=>e.id===editId)
 <label>Reiseziel</label><input value="${esc(F.to)}" oninput="F.to=this.value">
 <label>Reisezweck</label><input value="${esc(F.purpose)}" oninput="F.purpose=this.value">
 <label>Kunde / Geschäftspartner</label><input value="${esc(F.partner)}" oninput="F.partner=this.value">
-<button class="sec" onclick="saveFav()">★ Als Favorit speichern</button>`}
+<button class="sec" onclick="swapRoute()">⇄ Rückfahrt (Start und Ziel tauschen)</button> <button class="sec" onclick="saveFav()">★ Als Favorit speichern</button>`}
  h+=`<div class="err">${esc(msg)}</div><button onclick="saveEntry()">${editId?"Korrektur speichern":"Fahrt speichern"}</button>${editId?` <button class="sec" onclick="editId=null;go('j')">Abbrechen</button>`:""}
 <p class="mut">Mikrofon-Taste der iPhone-Tastatur: Felder per Sprache diktieren.</p></div>`;return h}
 function vJournal(){const v=V(),l=eff(v.id).reverse();let h=`<div class="card"><h2>Journal · ${esc(v.name)}</h2>`;
@@ -106,6 +108,18 @@ function vPdf(){const v=V(),L=D.log[v.id]||[];
 <div class="pdf"><b>Fahrtenbuch ${esc(v.name)} · ${esc(v.plate)}</b><br>Anfangsstand bei Beginn: ${nf(v.startKm)} km · Stand ${new Date().toLocaleDateString("de-DE")}
 <table><tr><th>Nr</th><th>Erfasst am</th><th>Vorgang</th><th>Datum</th><th>Art</th><th>Km Start</th><th>Km Ende</th><th>km</th><th>Start</th><th>Ziel</th><th>Zweck</th><th>Partner</th></tr>
 ${L.map(r=>`<tr><td>${r.seq}</td><td>${new Date(r.at).toLocaleString("de-DE")}</td><td>${r.kind==="K"?"Korrektur zu "+r.ref:"Neu"}</td><td>${fd(r.date)}</td><td>${TY[r.type]}</td><td>${nf(r.startKm)}</td><td>${nf(r.endKm)}</td><td>${r.endKm-r.startKm}</td><td>${esc(r.from)}</td><td>${esc(r.to)}</td><td>${esc(r.purpose)}</td><td>${esc(r.partner)}</td></tr>`).join("")}</table></div>`}
+let rmsg="";
+function parseCsv(s){const o=[];let f="",q=false,r=[];for(let i=0;i<s.length;i++){const c=s[i];if(q){if(c==='"'){if(s[i+1]==='"'){f+='"';i++}else q=false}else f+=c}else if(c==='"')q=true;else if(c===";"){r.push(f);f=""}else if(c==="\n"){r.push(f);o.push(r);r=[];f=""}else if(c!=="\r")f+=c}if(f||r.length){r.push(f);o.push(r)}return o}
+function restore(inp){const file=inp.files&&inp.files[0];if(!file)return;const v=V(),rd=new FileReader();
+ rd.onload=()=>{const rev={"Geschäftlich":"b","Privat":"p","Arbeitsweg":"w"},rows=[];
+  parseCsv(String(rd.result).replace(/^\uFEFF/,"")).forEach(c=>{if(c.length<12)return;const seq=parseInt(c[0]),sk=parseInt(c[5]),ek=parseInt(c[6]),t=rev[c[4]],at=Date.parse(c[1]);
+   if(isNaN(seq)||isNaN(sk)||isNaN(ek)||!t||!/^\d{4}-\d{2}-\d{2}$/.test(c[3]))return;
+   const k=/^Korrektur zu (\d+)/.exec(c[2]);const row={seq,at:isNaN(at)?Date.now():at,kind:k?"K":"E",date:c[3],type:t,startKm:sk,endKm:ek,from:c[8],to:c[9],purpose:c[10],partner:c[11]};if(k)row.ref=+k[1];rows.push(row)});
+  if(!rows.length){rmsg="Keine gültigen Zeilen gefunden.";inp.value="";return render()}
+  rows.sort((a,b)=>a.seq-b.seq);
+  if((D.log[v.id]||[]).length&&!confirm("Die vorhandenen Einträge von "+v.name+" werden durch den Inhalt der Datei ersetzt. Fortfahren?")){inp.value="";return}
+  D.log[v.id]=rows;save();rmsg=rows.length+" Zeilen wiederhergestellt.";newForm();render()};
+ rd.readAsText(file)}
 function makePdf(){
  if(!window.jspdf||!window.jspdf.jsPDF){msg="PDF-Bibliothek nicht geladen. Internetverbindung prüfen und App neu öffnen.";alert(msg);return}
  const v=V(),L=D.log[v.id]||[],doc=new window.jspdf.jsPDF({orientation:"landscape",unit:"mm",format:"a4"});
@@ -131,7 +145,7 @@ function vSet(){const s=D.set;let h=`<div class="card"><h2>Fahrzeuge</h2>${D.veh
 <label>Name des Kurzbefehls für die Datei</label><input value="${esc(v.sc)}" onchange="V2(${v.id},this.value)"></div>`).join("")}
 <label>Neues Fahrzeug</label><input id="vn" placeholder="Name, z. B. Firmenwagen"><input id="vp" placeholder="Kennzeichen" style="margin-top:6px"><input id="vk" type="number" inputmode="numeric" placeholder="Kilometerstand zu Beginn" style="margin-top:6px">
 <div class="err">${esc(msg)}</div><button onclick="addVeh()">Fahrzeug anlegen</button></div>
-<div class="card"><h2>Datei per Kurzbefehl</h2><label class="days"><input type="checkbox" ${s.sync?"checked":""} onchange="setS('sync',this.checked)"> Jede Fahrt an den Kurzbefehl senden (hängt eine Zeile an die CSV an)</label></div>
+${D.veh.length?`<div class="card"><h2>Wiederherstellung aus CSV</h2><p class="mut">Liest die CSV-Datei für „${esc(V().name)}“ wieder ein. Lege das Fahrzeug vorher mit dem gleichen Anfangsstand an.</p><input type="file" accept=".csv,.txt,text/csv,text/plain" onchange="restore(this)"><div class="err">${esc(rmsg)}</div></div>`:""}<div class="card"><h2>Datei per Kurzbefehl</h2><label class="days"><input type="checkbox" ${s.sync?"checked":""} onchange="setS('sync',this.checked)"> Jede Fahrt an den Kurzbefehl senden (hängt eine Zeile an die CSV an)</label></div>
 <div class="card"><h2>Erinnerung</h2><div class="days">${[1,2,3,4,5,6,0].map(d=>`<label><input type="checkbox" ${s.days.includes(d)?"checked":""} onchange="setDay(${d},this.checked)"> ${WD[d]}</label>`).join("")}</div>
 <label>Uhrzeit</label><input type="time" value="${s.time}" onchange="setS('time',this.value)">
 <label>Urlaubsmodus bis einschließlich (leer = aus)</label><input type="date" value="${s.until}" onchange="setS('until',this.value)">
@@ -145,6 +159,16 @@ function render(){let h="";
  h+=view==="e"?vEntry():view==="j"?vJournal():view==="a"?vEval():view==="p"?vPdf():vSet();
  $("#app").innerHTML=h;
  if(pending){const u=pending;pending=null;setTimeout(()=>{location.href=u},300)}}
-try{const c=document.createElement("canvas");c.width=c.height=180;const x=c.getContext("2d");x.fillStyle="#1d6b4f";x.fillRect(0,0,180,180);x.fillStyle="#fff";x.font="bold 84px system-ui";x.textAlign="center";x.fillText("FB",90,118);$("#ico").href=c.toDataURL("image/png")}catch(e){}
+try{const c=document.createElement("canvas");c.width=c.height=180;const x=c.getContext("2d");x.scale(1.125,1.125);
+ const poly=(p,f)=>{x.beginPath();p.forEach((q,i)=>i?x.lineTo(q[0],q[1]):x.moveTo(q[0],q[1]));x.closePath();x.fillStyle=f;x.fill()};
+ x.fillStyle="#1d6b4f";x.fillRect(0,0,160,160);
+ poly([[20,50],[78,60],[78,122],[20,112]],"#fff");poly([[82,60],[140,50],[140,112],[82,122]],"#fff");
+ poly([[14,56],[14,118],[80,130],[146,118],[146,56],[140,50],[140,112],[80,122],[20,112],[20,50]],"#d9e8e1");
+ x.save();x.translate(49,88);x.scale(0.62,0.62);x.translate(-48,-52);
+ x.fillStyle="#1d6b4f";x.fill(new Path2D("M16 62 L16 52 Q16 48 20 48 L30 48 L38 34 Q40 32 43 32 L58 32 Q61 32 63 34 L70 48 L76 48 Q80 48 80 52 L80 62 Z"));
+ x.fillStyle="#fff";x.fillRect(42,37,10,10);x.fillRect(54,37,8,10);
+ [33,63].forEach(cx=>{[[10,"#fff"],[8,"#1d6b4f"],[3,"#fff"]].forEach(a=>{x.beginPath();x.arc(cx,64,a[0],0,6.2832);x.fillStyle=a[1];x.fill()})});
+ x.restore();x.fillStyle="#1d6b4f";x.font="600 36px system-ui,-apple-system,sans-serif";x.textAlign="center";x.fillText("FB",111,98);
+ $("#ico").href=c.toDataURL("image/png")}catch(e){}
 if(D.veh.length)newForm();render();
 </script></body></html>
