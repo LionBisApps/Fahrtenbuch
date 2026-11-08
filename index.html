@@ -115,7 +115,7 @@ function makePdf(){
   head:[["Nr","Erfasst am","Vorgang","Datum","Art","Km Start","Km Ende","km","Start","Ziel","Zweck","Partner"]],
   body:L.map(r=>[r.seq,new Date(r.at).toLocaleString("de-DE"),r.kind==="K"?"Korrektur zu "+r.ref:"Neu",fd(r.date),TY[r.type],nf(r.startKm),nf(r.endKm),r.endKm-r.startKm,r.from,r.to,r.purpose,r.partner])});
  const name="Fahrtenbuch-"+v.plate.replace(/[^A-Za-z0-9]/g,"")+".pdf",file=new File([doc.output("blob")],name,{type:"application/pdf"});
- if(navigator.canShare&&navigator.canShare({files:[file]}))navigator.share({files:[file],title:"Fahrtenbuch"}).catch(()=>{});else doc.save(name)}
+ if(navigator.canShare&&navigator.canShare({files:[file]}))navigator.share({files:[file]}).catch(()=>{});else doc.save(name)}
 function addVeh(){const n=$("#vn").value.trim(),p=$("#vp").value.trim(),k=parseInt($("#vk").value);
  if(!n||!p||isNaN(k)||k<0){msg="Name, Kennzeichen und Kilometerstand zu Beginn angeben.";return render()}
  const id=Date.now(),s="Fahrtenbuch Speichern "+(D.veh.length+1);D.veh.push({id,name:n,plate:p,startKm:k,sc:s});D.log[id]=[];if(!D.cur)D.cur=id;msg="";save();newForm();render()}
