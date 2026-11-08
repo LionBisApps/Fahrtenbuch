@@ -4,6 +4,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Fahrtenbuch"><meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="apple-touch-icon" id="ico"><title>Fahrtenbuch</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
 <style>
 :root{--bg:#f6f6f3;--fg:#1d1d1b;--card:#fff;--mut:#6b6b66;--acc:#1d6b4f;--bd:#dcdcd5;--bad:#b3261e;color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 @media (prefers-color-scheme:dark){:root{--bg:#161615;--fg:#eeeeea;--card:#222220;--mut:#a0a09a;--acc:#5cc29a;--bd:#38382f;--bad:#f2b8b5;color-scheme:dark}}
@@ -100,10 +102,20 @@ function vEval(){const v=V(),l=eff(v.id).map(e=>e.cur),ys=[...new Set(l.map(c=>+
  h+=`</div><div class="card"><h2>Kilometer pro Monat</h2><table><tr><th>Monat</th><th>Gesch.</th><th>Privat</th><th>Arbw.</th><th>Σ</th></tr>${M.map((m,i)=>`<tr><td>${mn[i]}</td><td>${nf(m.b)}</td><td>${nf(m.p)}</td><td>${nf(m.w)}</td><td>${nf(m.b+m.p+m.w)}</td></tr>`).join("")}</table>
 <button onclick="go('p')">PDF-Ansicht mit Änderungsverlauf</button></div>`;return h}
 function vPdf(){const v=V(),L=D.log[v.id]||[];
- return `<div class="noprint"><button onclick="window.print()">Drucken / als PDF sichern</button> <button class="sec" onclick="go('a')">Zurück</button><p class="mut">Teilen-Symbol → „Sichern als PDF“ bzw. „In Dateien sichern“.</p></div>
+ return `<div class="noprint"><button onclick="makePdf()">PDF erstellen und sichern</button> <button class="sec" onclick="go('a')">Zurück</button><p class="mut">Im Teilen-Menü „In Dateien sichern“ wählen. Braucht Internet zum Laden der PDF-Bibliothek.</p></div>
 <div class="pdf"><b>Fahrtenbuch ${esc(v.name)} · ${esc(v.plate)}</b><br>Anfangsstand bei Beginn: ${nf(v.startKm)} km · Stand ${new Date().toLocaleDateString("de-DE")}
 <table><tr><th>Nr</th><th>Erfasst am</th><th>Vorgang</th><th>Datum</th><th>Art</th><th>Km Start</th><th>Km Ende</th><th>km</th><th>Start</th><th>Ziel</th><th>Zweck</th><th>Partner</th></tr>
 ${L.map(r=>`<tr><td>${r.seq}</td><td>${new Date(r.at).toLocaleString("de-DE")}</td><td>${r.kind==="K"?"Korrektur zu "+r.ref:"Neu"}</td><td>${fd(r.date)}</td><td>${TY[r.type]}</td><td>${nf(r.startKm)}</td><td>${nf(r.endKm)}</td><td>${r.endKm-r.startKm}</td><td>${esc(r.from)}</td><td>${esc(r.to)}</td><td>${esc(r.purpose)}</td><td>${esc(r.partner)}</td></tr>`).join("")}</table></div>`}
+function makePdf(){
+ if(!window.jspdf||!window.jspdf.jsPDF){msg="PDF-Bibliothek nicht geladen. Internetverbindung prüfen und App neu öffnen.";alert(msg);return}
+ const v=V(),L=D.log[v.id]||[],doc=new window.jspdf.jsPDF({orientation:"landscape",unit:"mm",format:"a4"});
+ doc.setFontSize(12);doc.text("Fahrtenbuch "+v.name+" - "+v.plate,10,10);
+ doc.setFontSize(9);doc.text("Anfangsstand bei Beginn: "+nf(v.startKm)+" km - Stand "+new Date().toLocaleDateString("de-DE"),10,15);
+ doc.autoTable({startY:19,theme:"grid",styles:{fontSize:7,cellPadding:1},headStyles:{fillColor:[29,107,79]},
+  head:[["Nr","Erfasst am","Vorgang","Datum","Art","Km Start","Km Ende","km","Start","Ziel","Zweck","Partner"]],
+  body:L.map(r=>[r.seq,new Date(r.at).toLocaleString("de-DE"),r.kind==="K"?"Korrektur zu "+r.ref:"Neu",fd(r.date),TY[r.type],nf(r.startKm),nf(r.endKm),r.endKm-r.startKm,r.from,r.to,r.purpose,r.partner])});
+ const name="Fahrtenbuch-"+v.plate.replace(/[^A-Za-z0-9]/g,"")+".pdf",file=new File([doc.output("blob")],name,{type:"application/pdf"});
+ if(navigator.canShare&&navigator.canShare({files:[file]}))navigator.share({files:[file],title:"Fahrtenbuch"}).catch(()=>{});else doc.save(name)}
 function addVeh(){const n=$("#vn").value.trim(),p=$("#vp").value.trim(),k=parseInt($("#vk").value);
  if(!n||!p||isNaN(k)||k<0){msg="Name, Kennzeichen und Kilometerstand zu Beginn angeben.";return render()}
  const id=Date.now(),s="Fahrtenbuch Speichern "+(D.veh.length+1);D.veh.push({id,name:n,plate:p,startKm:k,sc:s});D.log[id]=[];if(!D.cur)D.cur=id;msg="";save();newForm();render()}
